@@ -68,10 +68,55 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else if((r_scause() == 15 || r_scause() == 13) &&
-            vmfault(p->pagetable, r_stval(), (r_scause() == 13)? 1 : 0) != 0) {
-    // page fault on lazily-allocated page
+  } else if(r_scause() == 13 || r_scause() == 15){
+  uint64 va = r_stval();
+
+  if(va >= p->sz){
+    setkilled(p);
   } else {
+
+    p->pagefaults++;
+
+    printf("page faults=%d\n", p->pagefaults);
+
+    va = PGROUNDDOWN(va);
+
+    pte_t *pte = walk(p->pagetable, va, 0);
+
+    if(pte && (*pte & PTE_V)){
+      // ya existe
+    } else {
+
+      char *mem = kalloc();
+
+      if(mem == 0){
+        setkilled(p);
+      } else {
+
+        if(va >= p->vregion.start &&
+   va < p->vregion.start + p->vregion.size){
+
+  memset(mem, 'A', PGSIZE);
+
+} else {
+
+  memset(mem, 0, PGSIZE);
+}
+
+        if(mappages(p->pagetable,
+                    va,
+                    PGSIZE,
+                    (uint64)mem,
+                    PTE_W | PTE_R | PTE_X | PTE_U) != 0){
+
+          kfree(mem);
+          setkilled(p);
+        }
+      }
+    }
+  }
+} 
+ else {
     printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
     printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
     setkilled(p);

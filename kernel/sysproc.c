@@ -40,27 +40,24 @@ uint64
 sys_sbrk(void)
 {
   uint64 addr;
-  int t;
   int n;
 
   argint(0, &n);
-  argint(1, &t);
-  addr = myproc()->sz;
 
-  if(t == SBRK_EAGER || n < 0) {
-    if(growproc(n) < 0) {
-      return -1;
-    }
-  } else {
-    // Lazily allocate memory for this process: increase its memory
-    // size but don't allocate memory. If the processes uses the
-    // memory, vmfault() will allocate it.
-    if(addr + n < addr)
-      return -1;
-    if(addr + n > TRAPFRAME)
-      return -1;
-    myproc()->sz += n;
-  }
+  struct proc *p = myproc();
+  addr = p->sz;
+
+  if(n < 0)
+    return -1;
+
+  if(addr + n < addr)
+    return -1;
+
+  if(addr + n > TRAPFRAME)
+    return -1;
+
+  p->sz += n;
+
   return addr;
 }
 
@@ -97,6 +94,9 @@ sys_kill(void)
 
 // return how many clock tick interrupts have occurred
 // since start.
+
+
+//funcion de la mapzero
 uint64
 sys_uptime(void)
 {
@@ -106,4 +106,21 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+uint64
+sys_mapzero(void)
+{
+  int size;
+  uint64 addr;
+
+  argint(0, &size);
+
+  addr = myproc()->sz;
+
+  myproc()->vregion.start = addr;
+  myproc()->vregion.size = size;
+
+  myproc()->sz += size;
+
+  return addr;
 }
