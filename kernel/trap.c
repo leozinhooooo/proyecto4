@@ -3,6 +3,9 @@
 #include "memlayout.h"
 #include "riscv.h"
 #include "spinlock.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
 #include "proc.h"
 #include "defs.h"
 
@@ -71,52 +74,99 @@ usertrap(void)
   } else if(r_scause() == 13 || r_scause() == 15){
   uint64 va = r_stval();
 
+struct vma *v = 0;
+
+// buscar VMA
+for(int i = 0; i < MAXVMA; i++){
+
+  if(p->vmas[i].used &&
+     va >= p->vmas[i].addr &&
+     va < p->vmas[i].addr + p->vmas[i].length){
+
+    v = &p->vmas[i];
+    break;
+  }
+}
+
+// no existe VMA
+if(v == 0){
+
+  // lazy allocation normal
   if(va >= p->sz){
+
     setkilled(p);
+
   } else {
-
-    p->pagefaults++;
-
-    printf("page faults=%d\n", p->pagefaults);
 
     va = PGROUNDDOWN(va);
 
-    pte_t *pte = walk(p->pagetable, va, 0);
+    char *mem = kalloc();
 
-    if(pte && (*pte & PTE_V)){
-      // ya existe
+    if(mem == 0){
+
+      setkilled(p);
+
     } else {
 
-      char *mem = kalloc();
+      memset(mem, 0, PGSIZE);
 
-      if(mem == 0){
+      if(mappages(p->pagetable,
+                  va,
+                  PGSIZE,
+                  (uint64)mem,
+                  PTE_W | PTE_R | PTE_X | PTE_U) != 0){
+
+        kfree(mem);
         setkilled(p);
-      } else {
-
-        if(va >= p->vregion.start &&
-   va < p->vregion.start + p->vregion.size){
-
-  memset(mem, 'A', PGSIZE);
-
-} else {
-
-  memset(mem, 0, PGSIZE);
-}
-
-        if(mappages(p->pagetable,
-                    va,
-                    PGSIZE,
-                    (uint64)mem,
-                    PTE_W | PTE_R | PTE_X | PTE_U) != 0){
-
-          kfree(mem);
-          setkilled(p);
-        }
       }
     }
   }
+
+} else {
+
+  va = PGROUNDDOWN(va);
+
+  char *mem = kalloc();
+
+  if(mem == 0){
+
+    setkilled(p);
+
+  } else {
+
+    memset(mem, 0, PGSIZE);
+
+    ilock(v->file->ip);
+
+    readi(v->file->ip,
+          0,
+          (uint64)mem,
+          v->offset + (va - v->addr),
+          PGSIZE);
+
+    iunlock(v->file->ip);
+
+    int perm = PTE_U;
+
+    if(v->prot & PROT_READ)
+      perm |= PTE_R;
+
+    if(v->prot & PROT_WRITE)
+      perm |= PTE_W;
+
+    if(mappages(p->pagetable,
+                va,
+                PGSIZE,
+                (uint64)mem,
+                perm) != 0){
+
+      kfree(mem);
+      setkilled(p);
+    }
+  }
 } 
- else {
+
+} else {
     printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
     printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
     setkilled(p);

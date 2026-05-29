@@ -149,6 +149,7 @@ UPROGS=\
 	$U/_tsbrk\
 	$U/_tlazy\
 	$U/_tmmap_sim\
+	$U/_mmaptest
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

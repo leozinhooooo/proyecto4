@@ -81,7 +81,25 @@ struct trapframe {
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
-// Per-process state
+#define MAXVMA 16
+#define PROT_READ  0x1
+#define PROT_WRITE 0x2
+
+struct vma {
+  int used;
+
+  uint64 addr;
+  uint64 length;
+
+  int prot;
+  int flags;
+
+  struct file *file;
+
+  uint64 offset;
+};
+
+
 struct proc {
   struct spinlock lock;
 
@@ -104,7 +122,10 @@ struct proc {
 
   // these are private to the process, so p->lock need not be held.
   uint64 kstack;               // Virtual address of kernel stack
-  uint64 sz;                   // Size of process memory (bytes)
+  uint64 sz;
+
+struct vma vmas[MAXVMA];
+
   pagetable_t pagetable;       // User page table
   struct trapframe *trapframe; // data page for trampoline.S
   struct context context;      // swtch() here to run process

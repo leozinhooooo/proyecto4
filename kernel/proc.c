@@ -157,9 +157,28 @@ freeproc(struct proc *p)
 {
   if(p->trapframe)
     kfree((void*)p->trapframe);
+
   p->trapframe = 0;
+
+  // liberar VMAs
+  for(int i = 0; i < MAXVMA; i++){
+
+    if(p->vmas[i].used){
+
+      uvmunmap(p->pagetable,
+               p->vmas[i].addr,
+               PGROUNDUP(p->vmas[i].length) / PGSIZE,
+               1);
+
+      fileclose(p->vmas[i].file);
+
+      p->vmas[i].used = 0;
+    }
+  }
+
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
+
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
@@ -275,6 +294,16 @@ kfork(void)
     return -1;
   }
   np->sz = p->sz;
+
+for(int i = 0; i < MAXVMA; i++){
+
+  if(p->vmas[i].used){
+
+    np->vmas[i] = p->vmas[i];
+
+    filedup(np->vmas[i].file);
+  }
+}
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);

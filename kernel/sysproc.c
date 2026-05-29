@@ -124,3 +124,91 @@ sys_mapzero(void)
 
   return addr;
 }
+uint64
+sys_mmap(void)
+{
+    uint64 addr;
+    uint64 length;
+    int prot;
+    int flags;
+    int fd;
+    uint64 offset;
+
+    struct proc *p = myproc();
+
+    argaddr(0, &addr);
+    argaddr(1, &length);
+    argint(2, &prot);
+    argint(3, &flags);
+    argint(4, &fd);
+    argaddr(5, &offset);
+
+    // validar
+    if(length <= 0)
+        return -1;
+
+    if(fd < 0 || fd >= NOFILE || p->ofile[fd] == 0)
+        return -1;
+
+    // buscar VMA libre
+    struct vma *v = 0;
+
+    for(int i = 0; i < MAXVMA; i++){
+        if(p->vmas[i].used == 0){
+            v = &p->vmas[i];
+            break;
+        }
+    }
+
+    if(v == 0)
+        return -1;
+
+    // llenar VMA
+    v->used = 1;
+
+    v->addr = p->sz;
+    v->length = length;
+
+    v->prot = prot;
+    v->flags = flags;
+
+    v->file = filedup(p->ofile[fd]);
+
+    v->offset = offset;
+
+    // reservar espacio virtual
+    p->sz += length;
+
+    return v->addr;
+}
+
+uint64
+sys_munmap(void)
+{
+    uint64 addr;
+
+    argaddr(0, &addr);
+
+    struct proc *p = myproc();
+
+    for(int i = 0; i < MAXVMA; i++){
+
+        struct vma *v = &p->vmas[i];
+
+        if(v->used && v->addr == addr){
+
+            uvmunmap(p->pagetable,
+                     addr,
+                     PGROUNDUP(v->length) / PGSIZE,
+                     1);
+
+            v->used = 0;
+
+            fileclose(v->file);
+
+            return 0;
+        }
+    }
+
+    return -1;
+}
