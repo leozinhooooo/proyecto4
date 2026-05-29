@@ -29,7 +29,7 @@ main(void)
 
     printf("mapped addr = %p\n", p);
 
-    // esto debe causar page fault
+    
     printf("first char ascii = %d\n", p[0]);
     printf("%c%c%c%c\n", p[0], p[1], p[2], p[3]);
 
